@@ -1,5 +1,5 @@
 /* Garde l'application disponible à l'ouverture. Les données financières ne sont jamais mises en cache ici. */
-const CACHE = 'palmo-v8';
+const CACHE = 'palmo-v9';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'backend.js', 'config.js', 'vendor/supabase.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

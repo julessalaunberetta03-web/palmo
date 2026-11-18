@@ -211,3 +211,12 @@ button.step { width: 100%; padding: 4px 0; border: 0; background: none; text-ali
 .savetease { width: 100%; text-align: left; color: var(--text); gap: 2px; }
 .savetease b { font: 500 30px/1.15 var(--disp); font-stretch: 112%; }
 .savetease .textbtn { padding: 4px 0 0; min-height: 0; }
+
+.planlist { display: grid; }
+.planrow { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 62px; padding: 9px 0; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; }
+.plancheck { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--card2); color: var(--lime); font-weight: 700; font-size: 14px; }
+.planrow .rowtext b { white-space: normal; }
+.planrow .rowtext small { white-space: normal; }
+.planrow.done { opacity: .55; }
+.planrow.done .plancheck { background: var(--lime); color: var(--ink); }
+.planrow.done .rowtext b { text-decoration: line-through; }

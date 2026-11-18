@@ -74,7 +74,7 @@
   const S = {
     tab: 'accueil', scope: 'all', proPick: [], acctScope: 'perso', acctPick: '', invScope: 'all', ready: false, msg: 'Chargement de tes comptes…', hidden: store.get('hide') === '1',
     range: '1M', period: { from: '2026-10-01', to: today() }, openBrand: '', flow: 'out', showAll: false, q: '', closed: {}, valMode: 'val', pickDay: null, syncing: false, notes: [],
-    brands: DEFAULT_BRANDS, settings: { fx: 1.12, feeRate: 0, roasBE: 1 }, tx: [], accounts: [], snapshots: [], recurring: [], goals: [], budgets: [], form: null,
+    brands: DEFAULT_BRANDS, settings: { fx: 1.12, feeRate: 0, roasBE: 1 }, tx: [], accounts: [], snapshots: [], recurring: [], goals: [], budgets: [], plan: [], form: null,
   };
   let book = null, assets = null;
   const col = (n) => book.collection(n);
@@ -212,6 +212,15 @@
     const { from, to } = S.period, items = S.tx.filter((t) => t.brand === 'perso' && t.type === 'out' && t.date >= from && t.date <= to && subOf(t) === k).map((t) => ({ ...t, flow: 'out' }));
     openSheet(`<h2>${esc(SUBS[k].label)}</h2><p class="note">${esc(SUBS[k].tip)}</p><div>${txList(items)}</div>`);
   }
+  function planCard() {
+    const items = S.plan.slice().sort((a, b) => a.order - b.order); if (!items.length) return '';
+    const left = items.filter((i) => !i.done), gain = left.reduce((a, i) => a + (i.monthly || 0), 0), done = items.length - left.length;
+    return `<section class="card" id="plan"><div class="cardhead"><h2>Mon plan pour gagner plus</h2><span class="note">${done} sur ${items.length}</span></div><p class="big" style="font-size:34px"><span class="up m">+${fmt(gain)}</span></p><p class="note">possibles chaque mois avec les actions restantes. Ce sont des estimations.</p><ul class="planlist">${items.map((i) => `<li><button class="planrow${i.done ? ' done' : ''}" type="button" data-a="planitem" data-id="${esc(i.id)}"><span class="plancheck" aria-hidden="true">${i.done ? '✓' : i.order}</span><span class="rowtext"><b>${esc(i.title)}</b><small>${esc(i.tag || '')}</small></span><span class="rowval ${i.monthly ? 'pos' : ''}"><span class="m">${i.monthly ? '+' + fmt(i.monthly) : ''}</span>${i.monthly ? '<small>par mois</small>' : ''}</span></button></li>`).join('')}</ul></section>`;
+  }
+  function openPlanItem(id) {
+    const i = S.plan.find((x) => x.id === id); if (!i) return;
+    openSheet(`<h2>${esc(i.title)}</h2>${i.tag ? `<p class="note"><b>${esc(i.tag)}</b></p>` : ''}<p class="note">${esc(i.detail)}</p>${i.monthly ? `<p class="up m" style="font-weight:600">Gain estimé : +${fmt(i.monthly)} par mois</p>` : ''}<button class="cta" type="button" data-a="plandone" data-id="${esc(id)}">${i.done ? 'Remettre à faire' : 'Marquer comme fait'}</button>`);
+  }
   function brandCard(b) {
     const x = flows(S.period.from, S.period.to, [b.id]), open = S.openBrand === b.id, id = esc(b.id), spent = x.out + x.rec;
     const line = (attrs, label, value) => `<button class="bline" type="button" ${attrs}><span>${esc(label)}</span><span class="m">${value}</span></button>`;
@@ -230,7 +239,7 @@
     const recent = f.items.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     return `${heroHtml(pts)}
       <section class="card"><div class="cardhead"><h2>Résultat</h2><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div><p class="big" style="font-size:36px"><span class="${f.profit < 0 ? 'down' : 'up'}"><span class="m">${sgn(f.profit)}</span></span></p><div class="legend"><span>Entrées <span class="m">${fmt(f.in)}</span></span><span>Sorties <span class="m">${fmt(f.out + f.rec)}</span></span></div><button class="cta scanbtn" type="button" data-a="scan">${svg('scan')}Ajouter une facture ou une photo</button></section>
-      ${brandsCard}${(() => { const d = savingsData(); return d.save ? `<button class="card savetease" type="button" data-a="open-savings"><span class="note">À mettre de côté chaque mois</span><b class="up m">${fmt(d.save)}</b><span class="textbtn">Voir où économiser</span></button>` : ''; })()}${chartHtml(pts)}${rangesHtml()}${goalCard}
+      ${planCard()}${brandsCard}${(() => { const d = savingsData(); return d.save ? `<button class="card savetease" type="button" data-a="open-savings"><span class="note">À mettre de côté chaque mois</span><b class="up m">${fmt(d.save)}</b><span class="textbtn">Voir où économiser</span></button>` : ''; })()}${chartHtml(pts)}${rangesHtml()}${goalCard}
       <section class="card"><div class="cardhead"><h2>Dernières opérations</h2><a class="textbtn" href="#budget" style="text-decoration:none">Tout voir</a></div>${recent.length ? `<ul class="list">${recent.map((t) => txRow(t)).join('')}</ul>` : '<p class="note">Aucune opération sur cette période.</p>'}</section>`;
   }
   function vPatrimoine() {
@@ -564,6 +573,8 @@
     else if (a === 'open-scope') { location.hash = 'analyses'; S.tab = 'analyses'; goScope(v); }
     else if (a === 'acct') { S.acctPick = v; render(); }
     else if (a === 'subdetail') openSubDetail(v);
+    else if (a === 'planitem') openPlanItem(id);
+    else if (a === 'plandone') { const i = S.plan.find((x) => x.id === id); try { await col('plan').doc(id).update({ done: !i.done }); closeSheet(); toast(i.done ? 'Remis à faire.' : 'Bravo, action faite.'); } catch (e) { toast(dbMsg(e)); } }
     else if (a === 'open-savings') { location.hash = 'analyses'; S.tab = 'analyses'; S.scope = 'perso'; S.proPick = []; render(); setTimeout(() => { const c = $('#savings'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120); }
     else if (a === 'brandopen') { S.openBrand = S.openBrand === v ? '' : v; render(); }
     else if (a === 'addfor') openForm('tx', { type: v, brand: el.dataset.b });
@@ -636,7 +647,7 @@
     window.claude.use('assets').then((x) => { assets = x; });
     book = db.doc(`data/users/${uid}/book`);
     const slow = setTimeout(() => { if (!S.ready) stop('Tes comptes mettent du temps à arriver. Vérifie ta connexion.'); }, 10000);
-    const names = ['tx', 'accounts', 'snapshots', 'recurring', 'goals', 'budgets'], wait = new Set(names);
+    const names = ['tx', 'accounts', 'snapshots', 'recurring', 'goals', 'budgets', 'plan'], wait = new Set(names);
     const onErr = () => { clearTimeout(slow); stop('Impossible de charger tes comptes. Recharge la page.'); };
     book.onSnapshot((s) => { const d = s.exists ? s.data() : null; if (d) { S.settings = { fx: d.fx || 1.12, feeRate: d.feeRate == null ? 0 : d.feeRate, roasBE: d.roasBE || 1 }; if (Array.isArray(d.brands) && d.brands.length) S.brands = d.brands; } if (S.ready) render(); }, onErr);
     names.forEach((n) => col(n).onSnapshot((snap) => { S[n] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); wait.delete(n); if (!wait.size) { S.ready = true; clearTimeout(slow); } if (S.ready && !$('#sheet').open) render(); else if (S.ready) renderChrome(); }, onErr));
