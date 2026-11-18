@@ -16,9 +16,9 @@
   const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[k]}</svg>`;
   const TABS = [['accueil', 'Accueil', 'home'], ['patrimoine', 'Patrimoine', 'pat'], ['budget', 'Budget', 'bud'], ['analyses', 'Analyses', 'ana'], ['placements', 'Placements', 'inv']];
   const IN = { ventes: 'Ventes', clients: 'Clients', salaire: 'Salaire', aide: 'Aide familiale', recupere: 'Chargebacks récupérés', autre_in: 'Autres entrées' };
-  const OUT = { remboursements: 'Remboursements', chargebacks: 'Chargebacks', frais: 'Frais de paiement', agent: 'Agent et produits', pub: 'Publicité', outils: 'Outils et abonnements', logement: 'Logement', transport: 'Transport', courses: 'Courses', restos: 'Restaurants', cadeaux: 'Cadeaux et virements', loisirs: 'Loisirs', impots: 'Impôts', autre_out: 'Autres dépenses' };
+  const OUT = { remboursements: 'Remboursements', chargebacks: 'Chargebacks', frais: 'Frais de paiement', agent: 'Agent et produits', pub: 'Publicité', outils: 'Outils et abonnements', logement: 'Logement', transport: 'Transport', courses: 'Courses', restos: 'Restaurants', etudes: 'Études', cadeaux: 'Cadeaux et virements', loisirs: 'Loisirs', impots: 'Impôts', autre_out: 'Autres dépenses' };
   const CAT = { ...IN, ...OUT, virement: 'Virement interne' };
-  const CATS = { perso: { in: ['salaire', 'aide', 'autre_in'], out: ['logement', 'transport', 'courses', 'restos', 'cadeaux', 'loisirs', 'outils', 'impots', 'autre_out'] }, pro: { in: ['ventes', 'clients', 'recupere', 'autre_in'], out: ['remboursements', 'chargebacks', 'frais', 'agent', 'pub', 'outils', 'impots', 'autre_out'] } };
+  const CATS = { perso: { in: ['salaire', 'aide', 'autre_in'], out: ['logement', 'etudes', 'transport', 'courses', 'restos', 'cadeaux', 'loisirs', 'outils', 'impots', 'autre_out'] }, pro: { in: ['ventes', 'clients', 'recupere', 'autre_in'], out: ['remboursements', 'chargebacks', 'frais', 'agent', 'pub', 'outils', 'impots', 'autre_out'] } };
   const catsFor = (type, brandId, current) => { const keys = CATS[brandId === 'perso' ? 'perso' : 'pro'][type === 'in' ? 'in' : 'out'].slice(); if (current && CAT[current] && !keys.includes(current)) keys.unshift(current); return Object.fromEntries(keys.map((k) => [k, CAT[k]])); };
   const ACC = { courant: 'Comptes courants', epargne: 'Épargne', invest: 'Investissements', crypto: 'Crypto', immo: 'Immobilier', autre: 'Autres actifs', dette: 'Dettes' };
   const SUBS = {
@@ -35,10 +35,11 @@
     sorties: { label: 'Sorties et jeux', group: 'Loisirs', cut: 0.3, tip: 'Choisis à l’avance un budget sorties pour le mois.' },
     abonnements: { label: 'Abonnements', group: 'Abonnements et frais', cut: 0.25, tip: 'Résilie ce que tu n’utilises pas chaque mois.' },
     frais: { label: 'Frais bancaires', group: 'Abonnements et frais', cut: 0.5, tip: 'Paye avec la carte qui ne prend pas de frais à l’étranger.' },
+    ecole: { label: 'École', group: 'Études', cut: 0, tip: 'Dépense indispensable : elle n’entre pas dans les économies possibles.' },
     autres: { label: 'Autres', group: 'Autres', cut: 0, tip: 'Petites dépenses diverses.' },
     aclasser: { label: 'À préciser', group: 'À préciser', cut: 0, tip: 'Dis-moi à quoi correspond cet argent pour le classer.' },
   };
-  const SUB_BY_CAT = { courses: 'courses', restos: 'restos', transport: 'deplacements', cadeaux: 'amis', loisirs: 'sorties', outils: 'abonnements' };
+  const SUB_BY_CAT = { etudes: 'ecole', courses: 'courses', restos: 'restos', transport: 'deplacements', cadeaux: 'amis', loisirs: 'sorties', outils: 'abonnements' };
   const FREQ = { mois: 'par mois', semaine: 'par semaine', an: 'par an' };
   const RANGES = { '7J': 7, '1M': 30, '3M': 91, '6M': 182, 'YTD': -1, '1A': 365, 'TOUT': 0 };
   const DEFAULT_BRANDS = [{ id: 'perso', name: 'Perso', color: '#F3EDE3' }];
