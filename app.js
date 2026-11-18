@@ -54,13 +54,13 @@
 
   const S = {
     tab: 'accueil', scope: 'all', proPick: [], acctScope: 'perso', acctPick: '', invScope: 'all', ready: false, msg: 'Chargement de tes comptes…', hidden: store.get('hide') === '1',
-    range: '1M', period: { from: '2026-11-09', to: '2026-11-16' }, flow: 'out', showAll: false, q: '', closed: {}, valMode: 'val', pickDay: null, syncing: false, notes: [],
+    range: '1M', period: { from: '2026-10-01', to: today() }, openBrand: '', flow: 'out', showAll: false, q: '', closed: {}, valMode: 'val', pickDay: null, syncing: false, notes: [],
     brands: DEFAULT_BRANDS, settings: { fx: 1.12, feeRate: 0, roasBE: 1 }, tx: [], accounts: [], snapshots: [], recurring: [], goals: [], budgets: [], form: null,
   };
   let book = null, assets = null;
   const col = (n) => book.collection(n);
   const brand = (id) => S.brands.find((b) => b.id === id) || { id, name: id, color: '#888' };
-  const activeBrands = () => S.brands.map((b) => b.id).filter((id) => id !== 'perso' && (S.tx.some((t) => t.brand === id || t.toBrand === id) || S.recurring.some((r) => r.brand === id)));
+  const activeBrands = () => S.brands.map((b) => b.id).filter((id) => id !== 'perso');
   const proIds = () => (S.proPick.length ? S.proPick : activeBrands());
   const sel = () => { if (S.tab !== 'budget' && S.tab !== 'analyses') return S.brands.map((b) => b.id); return S.scope === 'perso' ? ['perso'] : S.scope === 'pro' ? proIds() : S.brands.map((b) => b.id); };
   const isPerso = (a) => a.brand === 'perso';
@@ -175,16 +175,25 @@
   const emptyBox = (text, a, label, extra) => `<div class="empty"><p>${esc(text)}</p><button class="cta" type="button" data-a="${a}" ${extra || ''}>${esc(label)}</button></div>`;
 
   // Écrans
+  function brandCard(b) {
+    const x = flows(S.period.from, S.period.to, [b.id]), open = S.openBrand === b.id, id = esc(b.id), spent = x.out + x.rec;
+    const line = (attrs, label, value) => `<button class="bline" type="button" ${attrs}><span>${esc(label)}</span><span class="m">${value}</span></button>`;
+    const ins = Object.keys(IN).filter((c) => x.byCat[c]).map((c) => line(`data-a="fix" data-v="${c}" data-b="${id}"`, IN[c], '+' + fmt(x.byCat[c])));
+    const outs = Object.keys(OUT).filter((c) => x.byCat[c]).sort((p, q) => x.byCat[q] - x.byCat[p]).map((c) => line(`data-a="fix" data-v="${c}" data-b="${id}"`, OUT[c], '−' + fmt(x.byCat[c])));
+    const recs = x.recs.map((r) => line(`data-a="recurring" data-id="${esc(r.id)}"`, r.label, '−' + fmt(r.value)));
+    const group = (title, rows) => (rows.length ? `<p class="dayhead">${title}</p>${rows.join('')}` : '');
+    const body = open ? `<div class="bdetail">${group('Rentré', ins)}${group('Dépensé', outs)}${group('Abonnements', recs)}${ins.length + outs.length + recs.length ? '' : '<p class="note">Aucune ligne sur cette période.</p>'}<div class="two"><button class="ghost" type="button" data-a="addfor" data-v="in" data-b="${id}">Ajouter une entrée</button><button class="ghost" type="button" data-a="addfor" data-v="out" data-b="${id}">Ajouter une dépense</button></div><button class="textbtn" type="button" data-a="open-budget" data-v="b:${id}">Voir toutes les opérations</button></div>` : '';
+    return `<div class="bcard"><button class="bhead" type="button" data-a="brandopen" data-v="${id}" aria-expanded="${open}"><span class="ava" style="color:${esc(b.color)}">${initials(b.name)}</span><span class="rowtext"><b>${esc(b.name)}</b><small>Résultat</small></span><span class="rowval ${x.profit > 0 ? 'pos' : x.profit < 0 ? 'down' : ''}"><span class="m">${sgn(x.profit)}</span></span>${svg('down')}</button><div class="bstats"><div><span>Rentré</span><b class="m">${fmt(x.in)}</b></div><div><span>Dépensé</span><b class="m">${fmt(spent)}</b></div></div>${body}</div>`;
+  }
   function vHome() {
     const pts = series(), f = flows(S.period.from, S.period.to);
     const goals = S.goals;
-    const parts = ['perso', ...activeBrands()];
-    const brandsCard = parts.length > 1 ? `<section class="card"><div class="cardhead"><h2>Résultat par activité</h2></div><ul class="list">${parts.map((id) => { const x = flows(S.period.from, S.period.to, [id]); return `<li><button class="row" type="button" data-a="open-scope" data-v="${id === 'perso' ? 'perso' : `b:${esc(id)}`}"><span class="ava" style="color:${esc(brand(id).color)}">${initials(brand(id).name)}</span><span class="rowtext"><b>${esc(brand(id).name)}</b><small>${id === 'perso' ? 'Compte perso' : 'Compte pro'}</small></span><span class="rowval ${x.profit > 0 ? 'pos' : ''}"><span class="m">${sgn(x.profit)}</span></span></button></li>`; }).join('')}</ul></section>` : '';
+    const brandsCard = `<section class="card"><div class="cardhead"><h2>Mes marques</h2><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div>${S.brands.filter((b) => b.id !== 'perso').map(brandCard).join('')}</section>`;
     const goalCard = `<section class="card"><div class="cardhead"><h2>Objectifs</h2>${goals.length ? '<button class="textbtn" type="button" data-a="add" data-v="goal">Ajouter</button>' : ''}</div>${goals.length ? goals.map((g) => { const p = Math.min(100, Math.round((g.current / g.target) * 100)); return `<button class="goal" type="button" data-a="goal" data-id="${esc(g.id)}"><div><b>${esc(g.name)}</b><span>${p} %</span></div><span class="progress" style="display:block"><i style="width:${p}%"></i></span><div><span class="m">${fmt(g.current)}</span><span class="m">${fmt(g.target)}</span></div></button>`; }).join('') : '<p class="note">Fixe un montant à atteindre.</p><button class="cta" type="button" data-a="add" data-v="goal">Créer un objectif</button>'}</section>`;
     const recent = f.items.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-    return `${heroHtml(pts)}${dotsHtml()}${chartHtml(pts)}${rangesHtml()}
+    return `${heroHtml(pts)}
       <section class="card"><div class="cardhead"><h2>Résultat</h2><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div><p class="big" style="font-size:36px"><span class="${f.profit < 0 ? 'down' : 'up'}"><span class="m">${sgn(f.profit)}</span></span></p><div class="legend"><span>Entrées <span class="m">${fmt(f.in)}</span></span><span>Sorties <span class="m">${fmt(f.out + f.rec)}</span></span></div><button class="cta scanbtn" type="button" data-a="scan">${svg('scan')}Ajouter une facture ou une photo</button></section>
-      ${brandsCard}${goalCard}
+      ${brandsCard}${chartHtml(pts)}${rangesHtml()}${goalCard}
       <section class="card"><div class="cardhead"><h2>Dernières opérations</h2><a class="textbtn" href="#budget" style="text-decoration:none">Tout voir</a></div>${recent.length ? `<ul class="list">${recent.map((t) => txRow(t)).join('')}</ul>` : '<p class="note">Aucune opération sur cette période.</p>'}</section>`;
   }
   function vPatrimoine() {
@@ -502,7 +511,7 @@
   function openPeriod() {
     const t = today(), first = `${t.slice(0, 7)}-01`, prev = parse(first); prev.setMonth(prev.getMonth() - 1); const pFirst = iso(prev), pLast = addDays(first, -1);
     S.form = { kind: 'period', doc: {} };
-    openSheet(`<h2>Période</h2><div class="menu"><button type="button" data-a="preset" data-f="2026-11-09" data-t="2026-11-16">9 au 16 nov.<small>Première période</small></button><button type="button" data-a="preset" data-f="${first}" data-t="${t}">Ce mois-ci<small>Jusqu'à aujourd'hui</small></button><button type="button" data-a="preset" data-f="${pFirst}" data-t="${pLast}">Mois dernier<small>Mois complet</small></button><button type="button" data-a="preset" data-f="${t.slice(0, 4)}-01-01" data-t="${t}">Cette année<small>Depuis janvier</small></button></div><form id="theform" novalidate style="display:grid;gap:14px">${formHtml('period', {})}</form>`);
+    openSheet(`<h2>Période</h2><div class="menu"><button type="button" data-a="preset" data-f="2026-10-01" data-t="${t}">Depuis le 1er oct.<small>Tout le suivi</small></button><button type="button" data-a="preset" data-f="${first}" data-t="${t}">Ce mois-ci<small>Jusqu'à aujourd'hui</small></button><button type="button" data-a="preset" data-f="${pFirst}" data-t="${pLast}">Mois dernier<small>Mois complet</small></button><button type="button" data-a="preset" data-f="${t.slice(0, 4)}-01-01" data-t="${t}">Cette année<small>Depuis janvier</small></button></div><form id="theform" novalidate style="display:grid;gap:14px">${formHtml('period', {})}</form>`);
   }
 
   // Interactions
@@ -515,6 +524,9 @@
     if (a === 'scope') goScope(v);
     else if (a === 'open-scope') { location.hash = 'analyses'; S.tab = 'analyses'; goScope(v); }
     else if (a === 'acct') { S.acctPick = v; render(); }
+    else if (a === 'brandopen') { S.openBrand = S.openBrand === v ? '' : v; render(); }
+    else if (a === 'addfor') openForm('tx', { type: v, brand: el.dataset.b });
+    else if (a === 'open-budget') { location.hash = 'budget'; S.tab = 'budget'; goScope(v); }
     else if (a === 'pick') togglePick(v);
     else if (a === 'eye') { S.hidden = !S.hidden; store.set('hide', S.hidden ? '1' : '0'); renderChrome(); }
     else if (a === 'range') { S.range = v; render(); }
@@ -541,7 +553,7 @@
     else if (a === 'recurring') { const r = S.recurring.find((x) => x.id === id); if (r) detail(r.label, [['Montant', `<span class="m">${orig(r.amount, r.currency)} ${FREQ[r.freq]}</span>`], ['Marque', esc(brand(r.brand).name)], ['Depuis le', esc(dShort(r.start))]], `<button class="cta" type="button" data-a="edit" data-c="recurring" data-id="${esc(id)}">Modifier</button>${delBtn('recurring', id)}`, quickField('recurring', id, r.amount, r.currency, `Montant ${FREQ[r.freq]}`)); }
     else if (a === 'goal') { const g = S.goals.find((x) => x.id === id); if (g) detail(g.name, [['Objectif', `<span class="m">${fmt(g.target)}</span>`], ['Mis de côté', `<span class="m">${fmt(g.current)}</span>`]], `<button class="cta" type="button" data-a="edit" data-c="goals" data-id="${esc(id)}">Modifier</button>${delBtn('goals', id)}`, quickField('goal', id, g.current / 100, 'EUR', 'Déjà mis de côté')); }
     else if (a === 'fix') {
-      const picks = sel().filter((b) => flows(S.period.from, S.period.to, [b]).byCat[v]).sort((x, y) => flows(S.period.from, S.period.to, [y]).byCat[v] - flows(S.period.from, S.period.to, [x]).byCat[v]);
+      const picks = (el.dataset.b ? [el.dataset.b] : sel()).filter((b) => flows(S.period.from, S.period.to, [b]).byCat[v]).sort((x, y) => flows(S.period.from, S.period.to, [y]).byCat[v] - flows(S.period.from, S.period.to, [x]).byCat[v]);
       openForm('fix', { cat: v, picks, brand: picks[0] || defaultBrand() });
     }
     else if (a === 'budgetcat') openForm('budget', S.budgets.find((b) => b.cat === v && sel().includes(b.brand)) || { cat: v });

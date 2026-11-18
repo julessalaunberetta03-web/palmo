@@ -186,3 +186,17 @@ h1.herolabel { font-weight: 400; margin: 0; }
 .quickrow span { color: var(--muted); font-weight: 500; }
 .quickrow .cta { width: auto; min-height: 48px; padding: 0 14px; font-size: 14px; }
 button.step { width: 100%; padding: 4px 0; border: 0; background: none; text-align: left; font-size: inherit; }
+
+.bcard { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.bcard:first-of-type { border-top: 0; padding-top: 0; }
+.bhead { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto 18px; align-items: center; gap: 12px; width: 100%; padding: 0; border: 0; background: none; text-align: left; }
+.bhead > svg { width: 18px; height: 18px; color: var(--muted); transition: transform .18s; }
+.bhead[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.bstats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bstats div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--card2); min-width: 0; }
+.bstats span { color: var(--muted); font-size: 13px; }
+.bstats b { font-weight: 600; font-size: 16px; white-space: nowrap; }
+.bdetail { display: grid; gap: 2px; }
+.bline { display: flex; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; align-items: center; padding: 6px 0; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; }
+.bdetail .two { margin-top: 10px; }
+.bdetail .ghost { font-size: 14px; padding: 0 6px; }
