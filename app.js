@@ -21,6 +21,24 @@
   const CATS = { perso: { in: ['salaire', 'aide', 'autre_in'], out: ['logement', 'transport', 'courses', 'restos', 'cadeaux', 'loisirs', 'outils', 'impots', 'autre_out'] }, pro: { in: ['ventes', 'clients', 'recupere', 'autre_in'], out: ['remboursements', 'chargebacks', 'frais', 'agent', 'pub', 'outils', 'impots', 'autre_out'] } };
   const catsFor = (type, brandId, current) => { const keys = CATS[brandId === 'perso' ? 'perso' : 'pro'][type === 'in' ? 'in' : 'out'].slice(); if (current && CAT[current] && !keys.includes(current)) keys.unshift(current); return Object.fromEntries(keys.map((k) => [k, CAT[k]])); };
   const ACC = { courant: 'Comptes courants', epargne: 'Épargne', invest: 'Investissements', crypto: 'Crypto', immo: 'Immobilier', autre: 'Autres actifs', dette: 'Dettes' };
+  const SUBS = {
+    courses: { label: 'Courses', group: 'Nourriture', cut: 0, tip: 'Dépense utile : cuisiner reste ton repas le moins cher.' },
+    restos: { label: 'Restaurants', group: 'Nourriture', cut: 0.4, tip: 'Garde une belle sortie par mois et fixe un plafond par repas.' },
+    fastfood: { label: 'Fast-food', group: 'Nourriture', cut: 0.4, tip: 'Prépare un repas à emporter les jours où tu sais que tu seras dehors.' },
+    livraison: { label: 'Livraison', group: 'Nourriture', cut: 0.6, tip: 'Les frais de livraison gonflent le prix : va chercher ta commande ou cuisine.' },
+    essence: { label: 'Essence', group: 'Voiture et déplacements', cut: 0.1, tip: 'Compare les stations et regroupe tes trajets.' },
+    assurance: { label: 'Assurance auto', group: 'Voiture et déplacements', cut: 0, tip: 'Fais un devis chez un concurrent une fois par an.' },
+    deplacements: { label: 'Uber, parking, transports', group: 'Voiture et déplacements', cut: 0.2, tip: 'Anticipe tes trajets pour limiter les courses de dernière minute.' },
+    voyages: { label: 'Vols et voyages', group: 'Voyages', cut: 0, tip: 'Dépense ponctuelle : prévois-la en mettant un peu de côté chaque mois.' },
+    amis: { label: 'Virements à des proches', group: 'Proches et cadeaux', cut: 0.3, tip: 'Fixe un plafond mensuel et note ce qu’on doit te rembourser.' },
+    cadeaux: { label: 'Cadeaux', group: 'Proches et cadeaux', cut: 0.3, tip: 'Décide de ton budget avant d’acheter.' },
+    sorties: { label: 'Sorties et jeux', group: 'Loisirs', cut: 0.3, tip: 'Choisis à l’avance un budget sorties pour le mois.' },
+    abonnements: { label: 'Abonnements', group: 'Abonnements et frais', cut: 0.25, tip: 'Résilie ce que tu n’utilises pas chaque mois.' },
+    frais: { label: 'Frais bancaires', group: 'Abonnements et frais', cut: 0.5, tip: 'Paye avec la carte qui ne prend pas de frais à l’étranger.' },
+    autres: { label: 'Autres', group: 'Autres', cut: 0, tip: 'Petites dépenses diverses.' },
+    aclasser: { label: 'À préciser', group: 'À préciser', cut: 0, tip: 'Dis-moi à quoi correspond cet argent pour le classer.' },
+  };
+  const SUB_BY_CAT = { courses: 'courses', restos: 'restos', transport: 'deplacements', cadeaux: 'amis', loisirs: 'sorties', outils: 'abonnements' };
   const FREQ = { mois: 'par mois', semaine: 'par semaine', an: 'par an' };
   const RANGES = { '7J': 7, '1M': 30, '3M': 91, '6M': 182, 'YTD': -1, '1A': 365, 'TOUT': 0 };
   const DEFAULT_BRANDS = [{ id: 'perso', name: 'Perso', color: '#F3EDE3' }];
@@ -175,6 +193,24 @@
   const emptyBox = (text, a, label, extra) => `<div class="empty"><p>${esc(text)}</p><button class="cta" type="button" data-a="${a}" ${extra || ''}>${esc(label)}</button></div>`;
 
   // Écrans
+  const subOf = (t) => (SUBS[t.sub] ? t.sub : SUB_BY_CAT[t.cat] || 'autres');
+  function savingsData() {
+    const { from, to } = S.period, days = Math.max(1, dayDiff(from, to) + 1), month = (c) => Math.round(c / days * 30.4), by = {};
+    S.tx.filter((t) => t.brand === 'perso' && t.type === 'out' && t.date >= from && t.date <= to).forEach((t) => { const k = subOf(t); by[k] = (by[k] || 0) + t.eurCents; });
+    const rows = Object.keys(SUBS).filter((k) => by[k] > 0).map((k) => ({ k, ...SUBS[k], total: by[k], perMonth: month(by[k]), save: Math.round(month(by[k]) * SUBS[k].cut) }));
+    return { rows, save: rows.reduce((a, r) => a + r.save, 0), perMonth: rows.reduce((a, r) => a + r.perMonth, 0) };
+  }
+  function savingsCard() {
+    const d = savingsData(); if (!d.rows.length) return '';
+    const top = Math.max(...d.rows.map((r) => r.perMonth));
+    const groups = [...new Set(d.rows.map((r) => r.group))].map((g) => ({ g, rows: d.rows.filter((r) => r.group === g) })).sort((a, b) => b.rows.reduce((x, r) => x + r.perMonth, 0) - a.rows.reduce((x, r) => x + r.perMonth, 0));
+    const html = groups.map(({ g, rows }) => `<div class="sgroup"><div class="shead"><b>${esc(g)}</b><span class="m">${fmt(rows.reduce((x, r) => x + r.perMonth, 0))} / mois</span></div>${rows.sort((a, b) => b.perMonth - a.perMonth).map((r) => `<button class="sline" type="button" data-a="subdetail" data-v="${r.k}"><span class="sname">${esc(r.label)}</span><span class="m">${fmt(r.perMonth)}</span><span class="progress" style="display:block"><i style="width:${Math.max(2, Math.round(r.perMonth / top * 100))}%"></i></span>${r.save ? `<small class="up m">Tu peux économiser ${fmt(r.save)} par mois</small>` : ''}</button>`).join('')}</div>`).join('');
+    return `<section class="card" id="savings"><div class="cardhead"><h2>Où économiser</h2></div><p class="big" style="font-size:34px"><span class="up m">${fmt(d.save)}</span></p><p class="note">à mettre de côté chaque mois en réduisant les postes ci-dessous, sur ${fmt(d.perMonth)} de dépenses perso par mois. C'est une estimation à ton rythme actuel.</p>${html}</section>`;
+  }
+  function openSubDetail(k) {
+    const { from, to } = S.period, items = S.tx.filter((t) => t.brand === 'perso' && t.type === 'out' && t.date >= from && t.date <= to && subOf(t) === k).map((t) => ({ ...t, flow: 'out' }));
+    openSheet(`<h2>${esc(SUBS[k].label)}</h2><p class="note">${esc(SUBS[k].tip)}</p><div>${txList(items)}</div>`);
+  }
   function brandCard(b) {
     const x = flows(S.period.from, S.period.to, [b.id]), open = S.openBrand === b.id, id = esc(b.id), spent = x.out + x.rec;
     const line = (attrs, label, value) => `<button class="bline" type="button" ${attrs}><span>${esc(label)}</span><span class="m">${value}</span></button>`;
@@ -193,7 +229,7 @@
     const recent = f.items.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     return `${heroHtml(pts)}
       <section class="card"><div class="cardhead"><h2>Résultat</h2><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div><p class="big" style="font-size:36px"><span class="${f.profit < 0 ? 'down' : 'up'}"><span class="m">${sgn(f.profit)}</span></span></p><div class="legend"><span>Entrées <span class="m">${fmt(f.in)}</span></span><span>Sorties <span class="m">${fmt(f.out + f.rec)}</span></span></div><button class="cta scanbtn" type="button" data-a="scan">${svg('scan')}Ajouter une facture ou une photo</button></section>
-      ${brandsCard}${chartHtml(pts)}${rangesHtml()}${goalCard}
+      ${brandsCard}${(() => { const d = savingsData(); return d.save ? `<button class="card savetease" type="button" data-a="open-savings"><span class="note">À mettre de côté chaque mois</span><b class="up m">${fmt(d.save)}</b><span class="textbtn">Voir où économiser</span></button>` : ''; })()}${chartHtml(pts)}${rangesHtml()}${goalCard}
       <section class="card"><div class="cardhead"><h2>Dernières opérations</h2><a class="textbtn" href="#budget" style="text-decoration:none">Tout voir</a></div>${recent.length ? `<ul class="list">${recent.map((t) => txRow(t)).join('')}</ul>` : '<p class="note">Aucune opération sur cette période.</p>'}</section>`;
   }
   function vPatrimoine() {
@@ -249,6 +285,7 @@
     const kpis = `<div class="kpis">${first}${S.scope === 'perso' ? kpi("Taux d'épargne", f.in > 0 ? margin + ' %' : 'Aucun', f.in > 0 ? `sur ${fmt(f.in)} de revenus` : 'aucun revenu saisi') + spend : kpi('Marge', margin === null ? 'Aucune' : margin + ' %', `sur ${fmt(f.in)} d'entrées`) + (roas === null ? spend : kpi('ROAS', num(roas.toFixed(2)), solo ? (roas >= S.settings.roasBE ? `au-dessus du seuil de ${num(S.settings.roasBE)}` : `sous le seuil de ${num(S.settings.roasBE)}`) : 'ventes divisées par la pub'))}${topKpi}</div>`;
     return `<div class="periodbar"><h1 class="sectiontitle">Analyses</h1><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div>${dotsHtml()}
       ${kpis}
+      ${S.scope === 'perso' ? savingsCard() : ''}
       <section class="card"><div class="cardhead"><h2>Entrées et sorties par jour</h2></div><div class="bars" data-noswipe>${bars}</div><div class="legend"><span><i class="dot" style="background:var(--lime)"></i>Entrées</span><span><i class="dot" style="background:var(--red)"></i>Sorties</span></div><p class="note">${pick ? `${esc(dLong(pick.d))} : ${fmt(pick.in)} d'entrées, ${fmt(pick.out)} de sorties.` : 'Touche une barre pour voir le détail du jour.'}</p></section>
       <section class="card"><div class="cardhead"><h2>Du chiffre au résultat</h2><span class="note">Touche pour corriger</span></div>${steps.length ? fall : '<p class="note">Aucune opération sur cette période.</p>'}<div class="step total"><span>Résultat</span><span class="m">${fmt(f.profit)}</span></div></section>
       ${brandsCmp}
@@ -335,7 +372,7 @@
   function formHtml(kind, d) {
     if (kind === 'tx') {
       const type = d.type || 'out';
-      return `<h2>${d.id ? 'Modifier' : 'Nouvelle opération'}</h2>${d.scanNote ? `<p class="note">${esc(d.scanNote)}</p>` : ''}${sel_('f-type', 'Sens', { out: 'Sortie', in: 'Entrée' }, type)}${sel_('f-brand', 'Perso ou marque', brandMap(), d.brand || defaultBrand())}${sel_('f-cat', 'Catégorie', catsFor(type, d.brand || defaultBrand(), d.cat), d.cat)}${field('f-label', 'Description', inp('f-label', d.label, 'autocomplete="off" maxlength="120"'))}${field('f-date', 'Date', inp('f-date', d.date || defDate(), 'type="date"'))}${amountRow(d, 'Montant')}${assets ? field('f-file', 'Facture ou justificatif', '<input id="f-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">', d.assetName ? `Fichier actuel : ${esc(d.assetName)}` : 'PDF ou photo, 20 Mo maximum.') : ''}${formFoot()}`;
+      return `<h2>${d.id ? 'Modifier' : 'Nouvelle opération'}</h2>${d.scanNote ? `<p class="note">${esc(d.scanNote)}</p>` : ''}${sel_('f-type', 'Sens', { out: 'Sortie', in: 'Entrée' }, type)}${sel_('f-brand', 'Perso ou marque', brandMap(), d.brand || defaultBrand())}${sel_('f-cat', 'Catégorie', catsFor(type, d.brand || defaultBrand(), d.cat), d.cat)}<div id="subwrap" ${type === 'out' && (d.brand || defaultBrand()) === 'perso' ? '' : 'hidden'}>${sel_('f-sub', 'Type de dépense', Object.fromEntries(Object.entries(SUBS).map(([k, v]) => [k, v.label])), d.sub || SUB_BY_CAT[d.cat] || 'autres')}</div>${field('f-label', 'Description', inp('f-label', d.label, 'autocomplete="off" maxlength="120"'))}${field('f-date', 'Date', inp('f-date', d.date || defDate(), 'type="date"'))}${amountRow(d, 'Montant')}${assets ? field('f-file', 'Facture ou justificatif', '<input id="f-file" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">', d.assetName ? `Fichier actuel : ${esc(d.assetName)}` : 'PDF ou photo, 20 Mo maximum.') : ''}${formFoot()}`;
     }
     if (kind === 'transfer') return `<h2>Virement entre marques</h2><p class="note">Il ne compte ni comme un revenu ni comme une dépense quand les deux marques sont affichées.</p>${sel_('f-brand', 'Depuis', brandMap(), d.brand || defaultBrand())}${sel_('f-to', 'Vers', brandMap(), d.toBrand || 'perso')}${field('f-label', 'Description', inp('f-label', d.label || 'Rémunération', 'maxlength="120"'))}${field('f-date', 'Date', inp('f-date', d.date || defDate(), 'type="date"'))}${amountRow(d, 'Montant')}${formFoot()}`;
     if (kind === 'recurring') return `<h2>${d.id ? 'Modifier' : 'Nouvel abonnement'}</h2>${sel_('f-brand', 'Perso ou marque', brandMap(), d.brand || defaultBrand())}${field('f-label', 'Nom', inp('f-label', d.label, 'maxlength="120"'))}${sel_('f-cat', 'Catégorie', catsFor('out', d.brand || defaultBrand(), d.cat || 'outils'), d.cat || 'outils')}${amountRow(d, 'Montant')}${sel_('f-freq', 'Fréquence', { mois: 'Par mois', semaine: 'Par semaine', an: 'Par an' }, d.freq || 'mois')}${field('f-start', 'À partir du', inp('f-start', d.start || S.period.from, 'type="date"'))}${formFoot()}`;
@@ -380,6 +417,7 @@
         if (!label) return fail('Ajoute une description.'); if (!validDate(date)) return fail('Choisis une date valide.'); if (!p) return fail(BAD);
         const data = kind === 'tx' ? { type: val('f-type'), brand: val('f-brand'), cat: val('f-cat'), label, date, ...p, source: doc.source || 'manuel', assetId: doc.assetId || null, assetName: doc.assetName || null } : { type: 'transfer', brand: val('f-brand'), toBrand: val('f-to'), cat: 'virement', label, date, ...p, source: 'manuel', assetId: null, assetName: null };
         if (kind === 'transfer' && data.brand === data.toBrand) return fail('Choisis deux marques différentes.');
+        if (kind === 'tx' && data.brand === 'perso' && data.type === 'out') data.sub = val('f-sub') || 'autres';
         const f = document.getElementById('f-file') && document.getElementById('f-file').files[0];
         if (f) { const isPdf = f.type === 'application/pdf'; const up = await assets.upload(isPdf ? f : await shrinkImage(f), { type: isPdf ? f.type : 'image/jpeg' }); if (doc.assetId && !S.tx.some((x) => x.id !== doc.id && x.assetId === doc.assetId)) await assets.delete(doc.assetId).catch(() => {}); data.assetId = up.id; data.assetName = f.name; }
         await (doc.id ? col('tx').doc(doc.id) : col('tx').doc()).set(data);
@@ -524,6 +562,8 @@
     if (a === 'scope') goScope(v);
     else if (a === 'open-scope') { location.hash = 'analyses'; S.tab = 'analyses'; goScope(v); }
     else if (a === 'acct') { S.acctPick = v; render(); }
+    else if (a === 'subdetail') openSubDetail(v);
+    else if (a === 'open-savings') { location.hash = 'analyses'; S.tab = 'analyses'; S.scope = 'perso'; S.proPick = []; render(); setTimeout(() => { const c = $('#savings'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120); }
     else if (a === 'brandopen') { S.openBrand = S.openBrand === v ? '' : v; render(); }
     else if (a === 'addfor') openForm('tx', { type: v, brand: el.dataset.b });
     else if (a === 'open-budget') { location.hash = 'budget'; S.tab = 'budget'; goScope(v); }
@@ -576,7 +616,8 @@
     }
   });
   document.addEventListener('change', (e) => { if (e.target.classList.contains('scanfile')) handleScan(e.target.files[0]); if (e.target.id === 'f-brand' && S.form && S.form.kind === 'fix') $('#f-amount').value = num((flows(S.period.from, S.period.to, [e.target.value]).byCat[S.form.doc.cat] || 0) / 100);
-    if ((e.target.id === 'f-type' || e.target.id === 'f-brand') && $('#f-cat')) { const c = $('#f-cat'), cur = c.value, type = $('#f-type') ? $('#f-type').value : 'out', map = catsFor(type, $('#f-brand').value); c.innerHTML = opts(map, cur in map ? cur : undefined); } });
+    if ((e.target.id === 'f-type' || e.target.id === 'f-brand') && $('#f-cat')) { const c = $('#f-cat'), cur = c.value, type = $('#f-type') ? $('#f-type').value : 'out', map = catsFor(type, $('#f-brand').value); c.innerHTML = opts(map, cur in map ? cur : undefined); }
+    if ($('#subwrap')) { $('#subwrap').hidden = !($('#f-brand').value === 'perso' && $('#f-type').value === 'out'); if (e.target.id === 'f-cat' && SUB_BY_CAT[e.target.value]) $('#f-sub').value = SUB_BY_CAT[e.target.value]; } });
   document.addEventListener('input', (e) => { if (e.target.id === 'q') { S.q = e.target.value; const p = e.target.selectionStart; render(); const q = $('#q'); q.focus(); q.setSelectionRange(p, p); } });
   document.addEventListener('submit', (e) => { if (e.target.id === 'theform') { e.preventDefault(); submitForm(); } if (e.target.id === 'quickform') { e.preventDefault(); submitQuick(e.target); } });
   document.addEventListener('focusin', (e) => { if (e.target.id === 'quickamount' || (e.target.id === 'f-amount' && S.form && S.form.kind === 'fix')) e.target.select(); });

@@ -200,3 +200,14 @@ button.step { width: 100%; padding: 4px 0; border: 0; background: none; text-ali
 .bline { display: flex; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; align-items: center; padding: 6px 0; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; }
 .bdetail .two { margin-top: 10px; }
 .bdetail .ghost { font-size: 14px; padding: 0 6px; }
+
+.sgroup { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.shead { display: flex; justify-content: space-between; gap: 10px; }
+.shead b { font: 500 16px var(--disp); }
+.shead span { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.sline { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; width: 100%; min-height: 44px; padding: 8px 0; border: 0; background: none; text-align: left; }
+.sline .progress { grid-column: 1 / -1; }
+.sline small { grid-column: 1 / -1; font-size: 13px; font-weight: 500; }
+.savetease { width: 100%; text-align: left; color: var(--text); gap: 2px; }
+.savetease b { font: 500 30px/1.15 var(--disp); font-stretch: 112%; }
+.savetease .textbtn { padding: 4px 0 0; min-height: 0; }
