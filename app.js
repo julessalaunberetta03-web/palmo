@@ -74,7 +74,7 @@
   const S = {
     tab: 'accueil', scope: 'all', proPick: [], acctScope: 'perso', acctPick: '', invScope: 'all', ready: false, msg: 'Chargement de tes comptes…', hidden: store.get('hide') === '1',
     range: '1M', period: { from: '2026-10-01', to: today() }, openBrand: '', flow: 'out', showAll: false, q: '', closed: {}, valMode: 'val', pickDay: null, syncing: false, notes: [],
-    brands: DEFAULT_BRANDS, settings: { fx: 1.12, feeRate: 0, roasBE: 1 }, tx: [], accounts: [], snapshots: [], recurring: [], goals: [], budgets: [], plan: [], form: null,
+    brands: DEFAULT_BRANDS, settings: { fx: 1.12, feeRate: 0, roasBE: 1 }, tx: [], accounts: [], snapshots: [], recurring: [], goals: [], budgets: [], plan: [], expected: [], form: null,
   };
   let book = null, assets = null;
   const col = (n) => book.collection(n);
@@ -212,13 +212,72 @@
     const { from, to } = S.period, items = S.tx.filter((t) => t.brand === 'perso' && t.type === 'out' && t.date >= from && t.date <= to && subOf(t) === k).map((t) => ({ ...t, flow: 'out' }));
     openSheet(`<h2>${esc(SUBS[k].label)}</h2><p class="note">${esc(SUBS[k].tip)}</p><div>${txList(items)}</div>`);
   }
+  // Points importants recalculés à partir des données
+  function metrics() {
+    const t = today(), d14 = addDays(t, -13), d30 = addDays(t, -29), month = t.slice(0, 7), sum = (f) => S.tx.filter(f).reduce((a, x) => a + x.eurCents, 0);
+    const on = (c) => (x) => x.brand === 'onction' && x.cat === c;
+    const { from, to } = S.period, days = Math.max(1, dayDiff(from, to) + 1), inP = (x) => x.date >= from && x.date <= to;
+    const sales = sum((x) => on('ventes')(x) && inP(x)), pub = sum((x) => on('pub')(x) && inP(x)), agent = sum((x) => on('agent')(x) && inP(x)), fees = sum((x) => on('frais')(x) && inP(x));
+    const sales14 = sum((x) => on('ventes')(x) && x.date >= d14), pub14 = sum((x) => on('pub')(x) && x.date >= d14);
+    const roas = pub14 > 0 ? sales14 / pub14 : pub > 0 ? sales / pub : null, margin = sales > 0 ? (sales - agent - fees) / sales : 0, pubMonth = pub / days * 30.4;
+    const lastOn = S.tx.filter((x) => x.brand === 'onction' && (x.cat === 'ventes' || x.cat === 'pub')).map((x) => x.date).sort().pop() || null;
+    const clients = S.tx.filter((x) => x.brand === 'palmside' && x.type === 'in').map((x) => x.date).sort(), lastClient = clients[clients.length - 1] || null;
+    const palmIn = sum((x) => x.brand === 'palmside' && x.type === 'in'), palmOut = sum((x) => x.brand === 'palmside' && x.type === 'out'), palmMonth = sum((x) => x.brand === 'palmside' && x.type === 'in' && x.date.startsWith(month));
+    const monthIn = sum((x) => x.brand === 'perso' && x.type === 'in' && x.date.startsWith(month)), monthOut = sum((x) => x.brand === 'perso' && x.type === 'out' && x.date.startsWith(month));
+    const disputes = sum((x) => on('chargebacks')(x) && x.date >= d30), persoBal = S.accounts.filter((a) => a.brand === 'perso').reduce((a, x) => a + acctValue(x, t), 0);
+    const expected = S.expected.map((e) => { const words = (e.match || []).map((w) => w.toLowerCase()), got = S.tx.some((x) => x.brand === 'perso' && x.type === 'in' && x.date.startsWith(month) && words.some((w) => x.label.toLowerCase().includes(w))); return { ...e, got }; });
+    return { t, roas, margin, pubMonth, lastOn, lastClient, palmNet: palmIn - palmOut, palmMonth, monthIn, monthOut, disputes, persoBal, expected, expectedLeft: expected.filter((e) => !e.got).reduce((a, e) => a + e.amount, 0), sv: savingsData() };
+  }
+  const subSave = (sv, keys) => sv.rows.filter((r) => keys.includes(r.k)).reduce((a, r) => a + r.save, 0);
+  const ROAS_GOAL = 1.8;
+  function insights() {
+    const k = metrics(), out = [], add = (area, level, title, text, go) => out.push({ area, level, title, text, go }), be = S.settings.roasBE, dayNow = Number(k.t.slice(8));
+    S.plan.filter((i) => i.due && !i.done).forEach((i) => { const n = dayDiff(k.t, i.due), go = `data-a="planitem" data-id="${esc(i.id)}"`; if (n < 0) add(i.area || 'all', 'urgent', `Date dépassée : ${esc(i.title)}`, `L'échéance était le ${esc(dShort(i.due))}. Vérifie où ça en est.`, go); else if (n <= 7) add(i.area || 'all', n <= 3 ? 'urgent' : 'warn', esc(i.title), n === 0 ? "C'est aujourd'hui, dernier jour." : `Il te reste ${n} jour${n > 1 ? 's' : ''}, jusqu'au ${esc(dShort(i.due))}.`, go); });
+    if (k.lastOn && dayDiff(k.lastOn, k.t) >= 3) add('onction', 'warn', 'Chiffres Onction à mettre à jour', `La dernière donnée date du ${esc(dShort(k.lastOn))}. Demande à Claude d'importer Shopify et Meta.`);
+    if (k.roas !== null) {
+      const r = num(k.roas.toFixed(2));
+      if (k.roas < be) add('onction', 'warn', 'Onction perd de l’argent', `Ton ROAS récent est de ${r}, sous ton seuil de ${num(be)}. N'augmente pas le budget : teste d'abord de nouvelles créas.`);
+      else if (k.roas < ROAS_GOAL) add('onction', 'info', 'Onction est proche de l’équilibre', `Ton ROAS récent est de ${r}. Attends ${num(ROAS_GOAL)} avant d'augmenter le budget.`);
+      else add('onction', 'good', 'Tu peux augmenter ta pub', `Ton ROAS récent est de ${r}. Monte le budget par petits paliers et surveille qu'il reste au-dessus de ${num(ROAS_GOAL)}.`);
+    }
+    if (k.disputes > 0) add('onction', 'warn', 'Les litiges te coûtent de l’argent', `${m(k.disputes)} perdus sur les 30 derniers jours. Réponds vite et envoie tes preuves de livraison.`);
+    if (k.lastClient) {
+      const n = dayDiff(k.lastClient, k.t);
+      if (n > 30) add('palmside', 'warn', 'Aucun paiement Palmside depuis ' + n + ' jours', `Relance ta prospection : un client de plus te rapporterait environ ${m(k.palmNet)}.`);
+      else add('palmside', 'good', 'Palmside rapporte', `${k.palmMonth ? m(k.palmMonth) + ' encaissés ce mois-ci. ' : ''}Dernier paiement le ${esc(dShort(k.lastClient))}. Vise un nouveau client ce mois-ci.`);
+    } else add('palmside', 'info', 'Pas encore de revenu Palmside', 'Ajoute ton premier paiement client dès qu’il arrive.');
+    k.expected.filter((e) => !e.got).forEach((e) => { const late = dayNow > e.dayTo + 3; add('perso', late ? 'warn' : 'info', late ? `${esc(e.label)} pas encore reçu` : `${esc(e.label)} attendu`, `${m(e.amount)} ${late ? 'étaient attendus' : 'attendus'} entre le ${e.dayFrom} et le ${e.dayTo} du mois.`); });
+    if (k.monthOut > k.monthIn) { const after = k.monthIn + k.expectedLeft - k.monthOut; add('perso', after < 0 ? 'warn' : 'info', after < 0 ? 'Tu dépenses plus que tu ne gagnes ce mois-ci' : 'Ton mois redevient positif avec les versements attendus', `${m(k.monthIn)} reçus pour ${m(k.monthOut)} dépensés${k.expectedLeft ? `, et ${m(k.expectedLeft)} encore attendus` : ''}.`); }
+    else if (k.monthIn > 0) add('perso', 'good', 'Ton mois est positif', `Il te reste ${m(k.monthIn - k.monthOut)} ce mois-ci. Mets-en une partie de côté tout de suite.`);
+    if (k.persoBal < 20000) add('perso', 'warn', 'Peu d’argent sur tes comptes perso', `Il te reste ${m(k.persoBal)}. Évite les dépenses non essentielles jusqu'au prochain versement.`);
+    const food = k.sv.rows.filter((r) => ['courses', 'restos', 'fastfood', 'livraison'].includes(r.k)), foodAll = food.reduce((a, r) => a + r.perMonth, 0), foodOut = food.filter((r) => r.k !== 'courses').reduce((a, r) => a + r.perMonth, 0);
+    if (foodAll > 0 && foodOut / foodAll > 0.6) add('perso', 'warn', 'Tu manges beaucoup dehors', `${m(foodOut)} par mois dehors contre ${m(foodAll - foodOut)} de courses, soit ${Math.round(foodOut / foodAll * 100)} % de ton budget nourriture.`, 'data-a="open-savings"');
+    if (k.sv.save > 0) add('perso', 'info', `${fmt(k.sv.save)} à mettre de côté par mois`, 'C’est ce que tu peux économiser à ton rythme actuel.', 'data-a="open-savings"');
+    const rank = { urgent: 0, warn: 1, good: 2, info: 3 };
+    return out.map((x, i) => ({ ...x, i })).sort((a, b) => rank[a.level] - rank[b.level] || a.i - b.i);
+  }
+  const LEVELS = { urgent: 'Urgent', warn: 'À surveiller', good: 'Bonne nouvelle', info: 'À savoir' };
+  function pointsCard(areas, limit) {
+    const list = insights().filter((x) => !areas || areas.includes(x.area) || x.area === 'all').slice(0, limit); if (!list.length) return '';
+    return `<section class="card" id="points"><div class="cardhead"><h2>Points importants</h2><span class="note">Mis à jour en direct</span></div><ul class="points">${list.map((x) => { const inner = `<span class="plevel ${x.level}">${LEVELS[x.level]}</span><b>${x.title}</b><span class="note">${x.text}</span>`; return `<li>${x.go ? `<button class="point" type="button" ${x.go}>${inner}</button>` : `<div class="point">${inner}</div>`}</li>`; }).join('')}</ul></section>`;
+  }
+  function planView(i) {
+    const k = metrics(), key = i.key, sv = k.sv;
+    if (key === 'palmside') return { ...i, monthly: Math.max(0, k.palmNet), tag: k.lastClient && dayDiff(k.lastClient, k.t) <= 30 ? 'Continue sur ta lancée' : 'Ton meilleur levier' };
+    if (key === 'roas') { const hit = k.roas !== null && k.roas >= ROAS_GOAL; return { ...i, monthly: hit || k.roas === null ? 0 : Math.round((ROAS_GOAL - k.roas) * k.pubMonth * k.margin), tag: k.roas === null ? 'Pas encore de données' : hit ? 'Objectif atteint' : `Il est à ${num(k.roas.toFixed(2))} en ce moment` }; }
+    if (key === 'food') return { ...i, monthly: subSave(sv, ['restos', 'fastfood', 'livraison']) };
+    if (key === 'gifts') return { ...i, monthly: subSave(sv, ['amis', 'cadeaux']) };
+    if (key === 'small') return { ...i, monthly: subSave(sv, ['sorties', 'deplacements', 'essence', 'abonnements', 'frais']) };
+    if (key === 'save') return { ...i, title: `Mets ${fmt(sv.save)} de côté chaque mois`, monthly: 0 };
+    return i;
+  }
   function planCard() {
-    const items = S.plan.slice().sort((a, b) => a.order - b.order); if (!items.length) return '';
+    const items = S.plan.map(planView).sort((a, b) => a.order - b.order); if (!items.length) return '';
     const left = items.filter((i) => !i.done), gain = left.reduce((a, i) => a + (i.monthly || 0), 0), done = items.length - left.length;
     return `<section class="card" id="plan"><div class="cardhead"><h2>Mon plan pour gagner plus</h2><span class="note">${done} sur ${items.length}</span></div><p class="big" style="font-size:34px"><span class="up m">+${fmt(gain)}</span></p><p class="note">possibles chaque mois avec les actions restantes. Ce sont des estimations.</p><ul class="planlist">${items.map((i) => `<li><button class="planrow${i.done ? ' done' : ''}" type="button" data-a="planitem" data-id="${esc(i.id)}"><span class="plancheck" aria-hidden="true">${i.done ? '✓' : i.order}</span><span class="rowtext"><b>${esc(i.title)}</b><small>${esc(i.tag || '')}</small></span><span class="rowval ${i.monthly ? 'pos' : ''}"><span class="m">${i.monthly ? '+' + fmt(i.monthly) : ''}</span>${i.monthly ? '<small>par mois</small>' : ''}</span></button></li>`).join('')}</ul></section>`;
   }
   function openPlanItem(id) {
-    const i = S.plan.find((x) => x.id === id); if (!i) return;
+    const raw = S.plan.find((x) => x.id === id); if (!raw) return; const i = planView(raw);
     openSheet(`<h2>${esc(i.title)}</h2>${i.tag ? `<p class="note"><b>${esc(i.tag)}</b></p>` : ''}<p class="note">${esc(i.detail)}</p>${i.monthly ? `<p class="up m" style="font-weight:600">Gain estimé : +${fmt(i.monthly)} par mois</p>` : ''}<button class="cta" type="button" data-a="plandone" data-id="${esc(id)}">${i.done ? 'Remettre à faire' : 'Marquer comme fait'}</button>`);
   }
   function brandCard(b) {
@@ -229,7 +288,7 @@
     const recs = x.recs.map((r) => line(`data-a="recurring" data-id="${esc(r.id)}"`, r.label, '−' + fmt(r.value)));
     const group = (title, rows) => (rows.length ? `<p class="dayhead">${title}</p>${rows.join('')}` : '');
     const body = open ? `<div class="bdetail">${group('Rentré', ins)}${group('Dépensé', outs)}${group('Abonnements', recs)}${ins.length + outs.length + recs.length ? '' : '<p class="note">Aucune ligne sur cette période.</p>'}<div class="two"><button class="ghost" type="button" data-a="addfor" data-v="in" data-b="${id}">Ajouter une entrée</button><button class="ghost" type="button" data-a="addfor" data-v="out" data-b="${id}">Ajouter une dépense</button></div><button class="textbtn" type="button" data-a="open-budget" data-v="b:${id}">Voir toutes les opérations</button></div>` : '';
-    return `<div class="bcard"><button class="bhead" type="button" data-a="brandopen" data-v="${id}" aria-expanded="${open}"><span class="ava" style="color:${esc(b.color)}">${initials(b.name)}</span><span class="rowtext"><b>${esc(b.name)}</b><small>Résultat</small></span><span class="rowval ${x.profit > 0 ? 'pos' : x.profit < 0 ? 'down' : ''}"><span class="m">${sgn(x.profit)}</span></span>${svg('down')}</button><div class="bstats"><div><span>Rentré</span><b class="m">${fmt(x.in)}</b></div><div><span>Dépensé</span><b class="m">${fmt(spent)}</b></div></div>${body}</div>`;
+    return `<div class="bcard"><button class="bhead" type="button" data-a="brandopen" data-v="${id}" aria-expanded="${open}"><span class="ava" style="color:${esc(b.color)}">${initials(b.name)}</span><span class="rowtext"><b>${esc(b.name)}</b><small>Résultat</small></span><span class="rowval ${x.profit > 0 ? 'pos' : x.profit < 0 ? 'down' : ''}"><span class="m">${sgn(x.profit)}</span></span>${svg('down')}</button><div class="bstats"><div><span>Rentré</span><b class="m">${fmt(x.in)}</b></div><div><span>Dépensé</span><b class="m">${fmt(spent)}</b></div></div>${(() => { const x1 = insights().find((p) => p.area === b.id); return x1 ? `<p class="bcomment"><span class="plevel ${x1.level}">${LEVELS[x1.level]}</span> ${x1.title}</p>` : ''; })()}${body}</div>`;
   }
   function vHome() {
     const pts = series(), f = flows(S.period.from, S.period.to);
@@ -238,8 +297,9 @@
     const goalCard = `<section class="card"><div class="cardhead"><h2>Objectifs</h2>${goals.length ? '<button class="textbtn" type="button" data-a="add" data-v="goal">Ajouter</button>' : ''}</div>${goals.length ? goals.map((g) => { const p = Math.min(100, Math.round((g.current / g.target) * 100)); return `<button class="goal" type="button" data-a="goal" data-id="${esc(g.id)}"><div><b>${esc(g.name)}</b><span>${p} %</span></div><span class="progress" style="display:block"><i style="width:${p}%"></i></span><div><span class="m">${fmt(g.current)}</span><span class="m">${fmt(g.target)}</span></div></button>`; }).join('') : '<p class="note">Fixe un montant à atteindre.</p><button class="cta" type="button" data-a="add" data-v="goal">Créer un objectif</button>'}</section>`;
     const recent = f.items.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
     return `${heroHtml(pts)}
+      ${pointsCard(null, 4)}
       <section class="card"><div class="cardhead"><h2>Résultat</h2><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div><p class="big" style="font-size:36px"><span class="${f.profit < 0 ? 'down' : 'up'}"><span class="m">${sgn(f.profit)}</span></span></p><div class="legend"><span>Entrées <span class="m">${fmt(f.in)}</span></span><span>Sorties <span class="m">${fmt(f.out + f.rec)}</span></span></div><button class="cta scanbtn" type="button" data-a="scan">${svg('scan')}Ajouter une facture ou une photo</button></section>
-      ${planCard()}${brandsCard}${(() => { const d = savingsData(); return d.save ? `<button class="card savetease" type="button" data-a="open-savings"><span class="note">À mettre de côté chaque mois</span><b class="up m">${fmt(d.save)}</b><span class="textbtn">Voir où économiser</span></button>` : ''; })()}${chartHtml(pts)}${rangesHtml()}${goalCard}
+      ${planCard()}${brandsCard}${chartHtml(pts)}${rangesHtml()}${goalCard}
       <section class="card"><div class="cardhead"><h2>Dernières opérations</h2><a class="textbtn" href="#budget" style="text-decoration:none">Tout voir</a></div>${recent.length ? `<ul class="list">${recent.map((t) => txRow(t)).join('')}</ul>` : '<p class="note">Aucune opération sur cette période.</p>'}</section>`;
   }
   function vPatrimoine() {
@@ -295,6 +355,7 @@
     const kpis = `<div class="kpis">${first}${S.scope === 'perso' ? kpi("Taux d'épargne", f.in > 0 ? margin + ' %' : 'Aucun', f.in > 0 ? `sur ${fmt(f.in)} de revenus` : 'aucun revenu saisi') + spend : kpi('Marge', margin === null ? 'Aucune' : margin + ' %', `sur ${fmt(f.in)} d'entrées`) + (roas === null ? spend : kpi('ROAS', num(roas.toFixed(2)), solo ? (roas >= S.settings.roasBE ? `au-dessus du seuil de ${num(S.settings.roasBE)}` : `sous le seuil de ${num(S.settings.roasBE)}`) : 'ventes divisées par la pub'))}${topKpi}</div>`;
     return `<div class="periodbar"><h1 class="sectiontitle">Analyses</h1><button class="textbtn" type="button" data-a="period">${esc(rangeLabel())}</button></div>${dotsHtml()}
       ${kpis}
+      ${pointsCard(S.scope === 'all' ? null : S.scope === 'perso' ? ['perso'] : proIds(), 5)}
       ${S.scope === 'perso' ? savingsCard() : ''}
       <section class="card"><div class="cardhead"><h2>Entrées et sorties par jour</h2></div><div class="bars" data-noswipe>${bars}</div><div class="legend"><span><i class="dot" style="background:var(--lime)"></i>Entrées</span><span><i class="dot" style="background:var(--red)"></i>Sorties</span></div><p class="note">${pick ? `${esc(dLong(pick.d))} : ${fmt(pick.in)} d'entrées, ${fmt(pick.out)} de sorties.` : 'Touche une barre pour voir le détail du jour.'}</p></section>
       <section class="card"><div class="cardhead"><h2>Du chiffre au résultat</h2><span class="note">Touche pour corriger</span></div>${steps.length ? fall : '<p class="note">Aucune opération sur cette période.</p>'}<div class="step total"><span>Résultat</span><span class="m">${fmt(f.profit)}</span></div></section>
@@ -647,7 +708,7 @@
     window.claude.use('assets').then((x) => { assets = x; });
     book = db.doc(`data/users/${uid}/book`);
     const slow = setTimeout(() => { if (!S.ready) stop('Tes comptes mettent du temps à arriver. Vérifie ta connexion.'); }, 10000);
-    const names = ['tx', 'accounts', 'snapshots', 'recurring', 'goals', 'budgets', 'plan'], wait = new Set(names);
+    const names = ['tx', 'accounts', 'snapshots', 'recurring', 'goals', 'budgets', 'plan', 'expected'], wait = new Set(names);
     const onErr = () => { clearTimeout(slow); stop('Impossible de charger tes comptes. Recharge la page.'); };
     book.onSnapshot((s) => { const d = s.exists ? s.data() : null; if (d) { S.settings = { fx: d.fx || 1.12, feeRate: d.feeRate == null ? 0 : d.feeRate, roasBE: d.roasBE || 1 }; if (Array.isArray(d.brands) && d.brands.length) S.brands = d.brands; } if (S.ready) render(); }, onErr);
     names.forEach((n) => col(n).onSnapshot((snap) => { S[n] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); wait.delete(n); if (!wait.size) { S.ready = true; clearTimeout(slow); } if (S.ready && !$('#sheet').open) render(); else if (S.ready) renderChrome(); }, onErr));

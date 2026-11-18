@@ -220,3 +220,13 @@ button.step { width: 100%; padding: 4px 0; border: 0; background: none; text-ali
 .planrow.done { opacity: .55; }
 .planrow.done .plancheck { background: var(--lime); color: var(--ink); }
 .planrow.done .rowtext b { text-decoration: line-through; }
+
+.points { display: grid; }
+.point { display: grid; gap: 3px; justify-items: start; width: 100%; padding: 11px 0; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; }
+.points li:first-child .point { border-top: 0; padding-top: 2px; }
+.point b { font-weight: 600; }
+.plevel { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 600; background: var(--card2); color: var(--muted); }
+.plevel.urgent { background: rgba(255,107,111,.18); color: var(--red); }
+.plevel.warn { background: rgba(232,197,71,.16); color: #E8C547; }
+.plevel.good { background: rgba(168,248,95,.16); color: var(--lime); }
+.bcomment { color: var(--muted); font-size: 14px; }
