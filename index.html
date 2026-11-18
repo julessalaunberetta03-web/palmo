@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' blob: data: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Palmo</title>
+<meta name="application-name" content="Palmo">
+<meta name="apple-mobile-web-app-title" content="Palmo">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400..700;125,400..700&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="locked">
+<main class="login" id="login" hidden>
+  <img src="icons/icon-192.png" alt="">
+  <h1>Palmo</h1>
+  <form id="loginform">
+    <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username" autocapitalize="none" required></div>
+    <div class="field"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div>
+    <p class="formerror" id="loginerr" role="alert" hidden></p>
+    <button class="cta" id="loginbtn" type="submit">Se connecter</button>
+  </form>
+</main>
+
+<div class="app" id="app" hidden>
+  <header class="bar">
+    <button class="iconbtn avatar" id="brandbtn" type="button" data-a="brands" aria-label="Gérer mes marques">M</button>
+    <p class="word">Palmo</p>
+    <button class="iconbtn" id="eye" type="button" data-a="eye" aria-label="Masquer les montants"></button>
+  </header>
+  <div class="chips" id="chips" data-noswipe role="group" aria-label="Marque affichée"></div>
+  <main id="view"></main>
+</div>
+<button class="fab" type="button" data-a="fab" aria-label="Ajouter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="nav" id="nav" aria-label="Sections"></nav>
+<dialog id="sheet" aria-label="Fenêtre"></dialog>
+<div id="toast" role="status" hidden></div>
+
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="backend.js"></script>
+</body>
+</html>

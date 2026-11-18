@@ -1,0 +1,3 @@
+config.local.js
+*.sql.private
+.DS_Store
